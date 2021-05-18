@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env, fs::File, path::Path};
+use std::{borrow::Cow, env, path::Path};
 mod rasm;
 fn main() {
     let args : Vec<_> = env::args().collect();
@@ -16,10 +16,14 @@ fn main() {
 }
 
 const USAGE : &'static str =
-r"USAGE:
-./rasm-cli.exe <Path to .rasm file>";
+r"
+USAGE:
+    ./rasm-cli.exe <options> <Path to .rasm file>
+OPTIONS:
+    -h : help
+";
 
-fn handle_args(args : Vec<String>) -> Result<File,Cow<'static,str>> {
+fn handle_args<'a>(args : Vec<String>) -> Result<&'a Path,Cow<'static,str>> {
     if args.len() - 1 != 1 {
         return Err(Cow::Borrowed("Path to rasm file must be specified!"));
     }
@@ -27,5 +31,5 @@ fn handle_args(args : Vec<String>) -> Result<File,Cow<'static,str>> {
     if !file_path.exists() {
         return Err(Cow::Owned(format!("{} does not exist!",file_path.to_str().unwrap())));
     }
-    return Ok(File::open(file_path).expect("Could not open file"))
+    return Ok(file_path.clone())
 }
