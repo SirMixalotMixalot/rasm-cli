@@ -1,4 +1,4 @@
-use std::{borrow::Cow, env, path::Path};
+use std::{borrow::Cow, env, path::PathBuf};
 mod rasm;
 fn main() {
     let args : Vec<_> = env::args().collect();
@@ -11,7 +11,7 @@ fn main() {
             std::process::exit(1)
         }
     };
-    rasm::run(file);
+    rasm::run(&file);
 
 }
 
@@ -23,13 +23,13 @@ OPTIONS:
     -h : help
 ";
 
-fn handle_args<'a>(args : Vec<String>) -> Result<&'a Path,Cow<'static,str>> {
+fn handle_args<'a>(args : Vec<String>) -> Result<PathBuf,Cow<'static,str>> {
     if args.len() - 1 != 1 {
         return Err(Cow::Borrowed("Path to rasm file must be specified!"));
     }
-    let file_path : &Path = Path::new(&args[1]); // since first element is the executables name
+    let file_path : PathBuf = (args[1].clone()).into(); // since first element is the executables name
     if !file_path.exists() {
         return Err(Cow::Owned(format!("{} does not exist!",file_path.to_str().unwrap())));
     }
-    return Ok(file_path.clone())
+    return Ok(file_path)
 }
