@@ -1,11 +1,15 @@
-use super::SymbolTable;
+use super::{Code,Instruction};
 use std::fmt::Display;
 
 struct CPU {
-    acc : u8,
+    acc : u16,
+    ix : u16,
     pc : u16,
     flags : Flags,
 }
+
+
+
 
 enum FLAGS {
     Z = (1<<3),
@@ -13,7 +17,7 @@ enum FLAGS {
     V = (1<<1),
     C = (1<<0),
 }
-struct Flags {
+struct Flags { //Not very space efficient TODO: Refactor to only use num
     z : bool,    //zero
     n : bool,   // negative 
     v : bool,  //  overflow
@@ -54,16 +58,17 @@ impl Display for Flags {
         // | N V Z C |
         // | 1 1 1 1 |
         //  ---------
-       let line = "----------";
-       let l2 = "| N V Z C |";
+       let line1 =      " _________";
+       let line2 =      " ---------";
+       let l2 =         "| N V Z C |";
        let l3 = format!("| {} {} {} {} |",
                 self.get_flag(FLAGS::N) as u8,self.get_flag(FLAGS::V) as u8,
                 self.get_flag(FLAGS::Z) as u8,self.get_flag(FLAGS::C) as u8
         );
-       write!(f,"{}\n{}\n{}\n{}\n",line,l2,l3,line)
+       write!(f,"{}\n{}\n{}\n{}\n",line1,l2,l3,line2)
 
     }
 }
-pub fn execute(code : Vec<String>,symbols : SymbolTable) {
+pub fn execute(code : Code ) {
     
 }

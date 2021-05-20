@@ -1,9 +1,11 @@
-use std::path::Path;
+use std::{cmp::{max, min}, path::Path};
 use std::collections::HashMap;
 pub mod exec;
 pub struct SymbolTable {
     table : HashMap<String,usize>,
     pub labels : usize,
+    min_addr : u16,
+    max_addr : u16,
 
     
 }
@@ -12,9 +14,14 @@ impl SymbolTable {
         Self {
             table : HashMap::new(),
             labels : 0,
+            min_addr : 0,
+            max_addr : 0
         }
     }
     pub fn add_var(&mut self,ident : String) {
+        if ident.as_str() == "ACC" || ident.as_str() == "IX" {
+            return;
+        }
         let l = self.table.len();
         if !self.table.contains_key(&ident) {
             self.table.insert(ident, l);
@@ -24,27 +31,118 @@ impl SymbolTable {
         self.table.insert(label,line);
         self.labels += 1;
     }
-    pub fn get(&self,key : String) -> usize {
-        *self.table.get(&key).unwrap()
+    pub fn get(&self,key : String) -> u16 {
+        (match key.as_str() {
+            "ACC" => 0,
+            "IX"  => 1,
+             _    => *self.table.get(&key).unwrap(),
+        }) as u16
+        
+        
+    }
+}
+
+
+
+pub struct Code {
+    table : SymbolTable,
+    pub code : Vec<Instruction>,
+}
+impl Code {
+    pub fn new(table : SymbolTable,code : Vec<Instruction>) -> Self {
+        Self {table,code}
     }
 }
 
 pub fn run(file : &Path) {
-    let (table,code) = build_table(&file); 
-    println!("{:?}",code);
-    exec::execute(code,table);
+    let code = build_code(&file); 
+    println!("{:?}",code.code);
+    exec::execute(code);
 }
+#[derive(Debug)]
+pub enum Instruction {
+    IO(bool),
+    LDD(u16),
+    LDM(u16),
+    SUBM(u16),
+    SUBA(u16),
+    STO(u16),
+    ADDM(u16),
+    ADDA(u16),
+    INC(bool), //true:ACC, false:IX
+    CMPA(u16),
+    CMPM(u16),
+    JPEM(u16),
+    JPEA(u16),
+    JPNM(u16),
+    JPNA(u16),
+    END,
+    UNKNOWN,
 
-fn build_table(file : &Path) -> (SymbolTable,Vec<String>) {
+
+}
+impl Instruction {
+    pub fn new(opcode : String,addr : u16) -> Self {
+        //handle sto
+        //all addresses have to be offset
+        //TODO:handle acc and ix in a better way?
+        if &opcode == "STO" {
+            return Self::STO(addr)
+        }
+        match opcode.chars().nth(0).unwrap() {
+            'L' => Instruction::load_instruction(opcode,addr),
+            'S' => Instruction::SUBA(addr),
+            'A' => Instruction::ADDA(addr),
+            'I' => Instruction::INC(addr == 0), //Acc is 0 in symtable
+            'C' => Instruction::CMPA(addr),
+            'J' => Instruction::jmp_instruction_addr(opcode,addr),
+            'E' => Instruction::END,
+             _  => Instruction::UNKNOWN,
+
+        }
+    }
+    pub fn with_imm(opcode : String, imm : u16) -> Self {
+        let first_char = opcode.chars().nth(0).unwrap();
+        match first_char {
+            'L' => Self::load_instruction(opcode,imm),
+            'S' => Instruction::SUBM(imm),
+            'A' => Instruction::ADDM(imm),
+            'C' => Instruction::CMPM(imm),
+            'J' => Self::jmp_instruction_imm(opcode,imm),
+             _  => Instruction::UNKNOWN,
+
+        }
+    }
+    fn load_instruction(opcode : String,data : u16) -> Self {
+        match opcode.chars().last().expect("Error on load instruction") {
+            'D' => Instruction::LDD(data),
+            'M' => Instruction::LDM(data),
+             _  => Instruction::UNKNOWN,
+        }
+    }
+    fn jmp_instruction_addr(opcode : String,data : u16) -> Self {
+    
+        match opcode.chars().nth(2).expect("Error on Jump instruction") {
+            'E' => Instruction::JPEA(data),
+            'N' => Instruction::JPNA(data),
+            
+             _  => Instruction::UNKNOWN,
+        }
+    }
+    fn jmp_instruction_imm(opcode : String,imm : u16) -> Self {
+        match opcode.chars().nth(2).expect("Error on Jump instruction") {
+            'E' => Instruction::JPEM(imm),
+            'N' => Instruction::JPNM(imm),
+             _  => Instruction::UNKNOWN,
+        }
+    }
+}
+fn build_code(file : &Path) -> Code {
     let mut table = SymbolTable::new();
     let mut code = Vec::new();
     let raw_bytes = std::fs::read(file).unwrap();
     let file_contents = String::from_utf8_lossy(&raw_bytes);
     for (index,line) in file_contents.lines().enumerate() {
-        // println!("{}",line);
-       //remove comments
-       //find symbols and map them to address
-       //add actual lines of code 
        //LABELS:
        //   Labels need to be added to the table with the line they are on
        //Variables:
@@ -53,8 +151,8 @@ fn build_table(file : &Path) -> (SymbolTable,Vec<String>) {
        //   Address literals start with # and are left as normal
        //Comments:
        //   Comments should start with ';' and are removed from the code
-       
-        let mut line = line;
+        
+        let mut line = line.trim();
         if let Some(n) = line.find(";") {
             if n == 0 {
                 eprintln!("Comment found on line {}",index);
@@ -62,32 +160,46 @@ fn build_table(file : &Path) -> (SymbolTable,Vec<String>) {
             }
             line = line.split_at(n).0;
         }
-        if (!line.starts_with("\t") && !line.starts_with(" ")) && line.ends_with(":") {
+        if line.ends_with(":") {
             println!("Adding label");
-            table.add_label(line.to_string(),index);
+            let pos = line.rfind(":").unwrap();
+            table.add_label(line[..pos].to_string(),index);
             continue;
         }
-        code.push(line.chars().skip_while(|c| !c.is_alphabetic()).collect());
+        //code.push(line.chars().skip_while(|c| !c.is_alphabetic()).collect());
         //tabxxxspace---
-        let x = line.chars()
-            .take_while(|c| !c.is_alphabetic())
-            .count();
-        if line.contains("IN") || line.contains("OUT") {
+        if line.ends_with("IN") || line.ends_with("OUT") {
+            code.push(Instruction::IO(line.ends_with("IN")));
             continue;
         }
-        let n = line.chars()
-                .skip(x)
+    
+
+        let opcode = line.chars()
                 .take_while(|c| c.is_alphabetic())
-                .count();
-        let ident = line.split_at(x + n).1;
+                .collect::<String>();
+        let n = opcode.len(); // presumably 3
+        
+        let ident = line.split_at(n).1;
             
         println!("Ident found {}",ident);
-    
+        //immediate addresses
         if !ident.starts_with("#") {
-            
-            table.add_var(ident.to_string());
+            let p = ident.parse::<u16>();
+            if p.is_err() {
+                table.add_var(ident.to_string());
+                
+                
+            }else 
+            {
+                let p = p.unwrap();
+                code.push(Instruction::with_imm(opcode,p));
+                table.min_addr = min(table.min_addr, p);
+                table.max_addr = max(table.max_addr, p);
+                continue;
+            }
         }
+        code.push(Instruction::new(opcode,table.get(ident.to_string())));
 
     }
-    (table,code)
+    Code::new(table,code)
 }
