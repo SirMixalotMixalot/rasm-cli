@@ -160,8 +160,11 @@ fn build_code(file : &Path) -> Code {
             }
             line = line.split_at(n).0;
         }
+        if line == "END" {
+            code.push(Instruction::END);
+            continue;
+        }
         if line.ends_with(":") {
-            println!("Adding label");
             let pos = line.rfind(":").unwrap();
             table.add_label(line[..pos].to_string(),index);
             continue;
@@ -179,11 +182,10 @@ fn build_code(file : &Path) -> Code {
                 .collect::<String>();
         let n = opcode.len(); // presumably 3
         
-        let ident = line.split_at(n).1;
-            
-        println!("Ident found {}",ident);
+        let ident = line.split_at(n + 1).1;
         //immediate addresses
         if !ident.starts_with("#") {
+        
             let p = ident.parse::<u16>();
             if p.is_err() {
                 table.add_var(ident.to_string());
@@ -197,6 +199,20 @@ fn build_code(file : &Path) -> Code {
                 table.max_addr = max(table.max_addr, p);
                 continue;
             }
+        }
+        //dealing with immediate values
+        if ident.starts_with("#") {
+            let fstring = &ident[1..];
+            let imm  = match fstring.chars().nth(0).unwrap() {
+                'B' => u16::from_str_radix(&fstring[2..],2),
+                '&' => u16::from_str_radix(&fstring[2..], 16),
+                '0'..='9' => u16::from_str_radix(fstring, 10),
+                _       => panic!("Immediate value not formatted correctly")
+            };
+            let imm = imm.expect("Error while parsing immediate value");
+            code.push(Instruction::with_imm(opcode.to_string(), imm));
+
+            continue;
         }
         code.push(Instruction::new(opcode,table.get(ident.to_string())));
 
