@@ -18,16 +18,25 @@ fn main() {
 const USAGE : &'static str =
 r"
 USAGE:
-    ./rasm-cli.exe <options> <Path to .rasm file>
+    ./rasm-cli.exe -h | <Path to .rasm file>
 OPTIONS:
-    -h : help
+    -h | --help : help
+Note:
+    Vertical bar '|' means 'or'
+
 ";
 
 fn handle_args<'a>(args : Vec<String>) -> Result<PathBuf,Cow<'static,str>> {
     if args.len() - 1 != 1 {
-        return Err(Cow::Borrowed("Path to rasm file must be specified!"));
+        return Err(Cow::Borrowed("Path to rasm file must be specified or '-h' flag only"));
+
     }
-    let file_path : PathBuf = (args[1].clone()).into(); // since first element is the executables name
+    let arg1 = args[1].clone();
+    if &arg1 == "-h" || &arg1 == "--help" {
+        println!("{}",USAGE);
+        std::process::exit(1);
+    }
+    let file_path : PathBuf = arg1.into(); // since first element is the executables name
     if !file_path.exists() {
         return Err(Cow::Owned(format!("{} does not exist!",file_path.to_str().unwrap())));
     }

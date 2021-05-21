@@ -28,7 +28,7 @@ impl SymbolTable {
         }
     }
     pub fn add_label(&mut self,label : String,line : usize) {
-        self.table.insert(label,line);
+        self.table.insert(label,line - 1);
         self.labels += 1;
     }
     pub fn get(&self,key : String) -> u16 {
@@ -52,6 +52,12 @@ impl Code {
     pub fn new(table : SymbolTable,code : Vec<Instruction>) -> Self {
         Self {table,code}
     }
+    pub fn len(&self) -> u16 {
+        self.code.len() as u16
+    }
+    pub fn get(&self,i : usize) -> &Instruction {
+        &self.code[i]
+    }
 }
 
 pub fn run(file : &Path) {
@@ -63,15 +69,15 @@ pub fn run(file : &Path) {
 pub enum Instruction {
     IO(bool),
     LDD(u16),
-    LDM(u16),
-    SUBM(u16),
+    LDM(i16),
+    SUBM(i16),
     SUBA(u16),
     STO(u16),
-    ADDM(u16),
+    ADDM(i16),
     ADDA(u16),
     INC(bool), //true:ACC, false:IX
     CMPA(u16),
-    CMPM(u16),
+    CMPM(i16),
     JPEM(u16),
     JPEA(u16),
     JPNM(u16),
@@ -101,14 +107,14 @@ impl Instruction {
 
         }
     }
-    pub fn with_imm(opcode : String, imm : u16) -> Self {
+    pub fn with_imm(opcode : String, imm : i16) -> Self {
         let first_char = opcode.chars().nth(0).unwrap();
         match first_char {
-            'L' => Self::load_instruction(opcode,imm),
+            'L' => Self::load_instruction(opcode,imm as u16),
             'S' => Instruction::SUBM(imm),
             'A' => Instruction::ADDM(imm),
             'C' => Instruction::CMPM(imm),
-            'J' => Self::jmp_instruction_imm(opcode,imm),
+            'J' => Self::jmp_instruction_imm(opcode,imm as u16),
              _  => Instruction::UNKNOWN,
 
         }
@@ -116,7 +122,7 @@ impl Instruction {
     fn load_instruction(opcode : String,data : u16) -> Self {
         match opcode.chars().last().expect("Error on load instruction") {
             'D' => Instruction::LDD(data),
-            'M' => Instruction::LDM(data),
+            'M' => Instruction::LDM(data as i16),
              _  => Instruction::UNKNOWN,
         }
     }
@@ -186,7 +192,7 @@ fn build_code(file : &Path) -> Code {
         //immediate addresses
         if !ident.starts_with("#") {
         
-            let p = ident.parse::<u16>();
+            let p = ident.parse::<i16>();
             if p.is_err() {
                 table.add_var(ident.to_string());
                 
@@ -195,8 +201,8 @@ fn build_code(file : &Path) -> Code {
             {
                 let p = p.unwrap();
                 code.push(Instruction::with_imm(opcode,p));
-                table.min_addr = min(table.min_addr, p);
-                table.max_addr = max(table.max_addr, p);
+                table.min_addr = min(table.min_addr, p as u16);
+                table.max_addr = max(table.max_addr, p as u16);
                 continue;
             }
         }
@@ -204,9 +210,9 @@ fn build_code(file : &Path) -> Code {
         if ident.starts_with("#") {
             let fstring = &ident[1..];
             let imm  = match fstring.chars().nth(0).unwrap() {
-                'B' => u16::from_str_radix(&fstring[2..],2),
-                '&' => u16::from_str_radix(&fstring[2..], 16),
-                '0'..='9' => u16::from_str_radix(fstring, 10),
+                'B' => i16::from_str_radix(&fstring[2..],2),
+                '&' => i16::from_str_radix(&fstring[2..], 16),
+                '0'..='9' => i16::from_str_radix(fstring, 10),
                 _       => panic!("Immediate value not formatted correctly")
             };
             let imm = imm.expect("Error while parsing immediate value");
