@@ -51,9 +51,12 @@ impl CPU {
         self.acc = imm;
     }
     fn io(&mut self, inp : bool) {
-        use std::io;
+        use std::io::{self,Write};
         if inp {
-            print!(">");
+            
+            let stdio = io::stdout();
+            let mut handle = stdio.lock();
+            handle.write_all(b">").unwrap();
             let mut buffer = String::new();
             io::stdin().read_line(&mut buffer).unwrap();
             self.acc = buffer.chars().nth(0).unwrap() as u32 as i16;
@@ -62,9 +65,9 @@ impl CPU {
         }
     }
     fn subm(&mut self, imm : i16) {
-        self.acc -= imm;
         let res = self.acc.checked_sub(imm);
         self.flag_register.set_flags(res);
+        self.acc -= imm;
     }
     fn suba(&mut self,addr: u16) {
         self.subm(self.memory[addr as usize]);
@@ -73,10 +76,11 @@ impl CPU {
         self.memory[addr as usize] = self.acc;
     }
     fn addm(&mut self, imm : i16) {
-        self.acc += imm;
+        
         self.flag_register.set_flags(
                 self.acc.checked_add(imm)
             );
+        self.acc += imm;
     }
     fn adda(&mut self, addr : u16) {
         self.addm(self.memory[addr as usize]);
@@ -147,14 +151,14 @@ r"
  ----------------------------------
 |              CPU                 |
 |    FLAGS                PC       |
-|    ---------           _____     |
-|   | N V Z C |         |{}    |    |
-|   | {} {} {} {} |          -----     | 
+|    ---------           _______   |
+|   | N V Z C |         |{:>5}  |  |
+|   | {} {} {} {} |          -------   | 
 |    ---------                     |
 |    ACC                 IX        |
-|  _____________    _____________  |
-| |{}            |  |{}            | |
-|  -------------    -------------  |  
+|  ________          _________     |
+| |{:>8}|        |{:>8} |    |
+|  --------          ---------     |  
  ---------------------------------- ",
                 
                self.pc,
@@ -237,6 +241,6 @@ pub fn execute(code : Code ) {
         println!("{}",cpu);
 
         let mut buf = String::new();
-        io::stdin().read_line(&mut buf);
+        io::stdin().read_line(&mut buf).unwrap();
     }
 }
