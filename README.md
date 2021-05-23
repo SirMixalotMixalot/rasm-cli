@@ -7,7 +7,7 @@ An  interpreter for the 'reduced' assembly language for AS level
 - Current Textual Interface leaves alot to be desired
 
 ## Installaion
-Head over to 'Releases' and download the rasm.zip  
+Head over to ['Releases'](https://github.com/SirMixalotMixalot/rasm-cli/releases) and download the rasm.zip  
 Unzip it to a directory of your choice  
 Go to that directory and on the command line (cmd/bash/etc...) type `./rasm-cli example.rasm` and it should work
 
