@@ -15,4 +15,5 @@ Go to that directory and on the command line (cmd/bash/etc...) type `./rasm-cli 
 - [ ] Refactor code
 - [ ] Improve tui using [tui-rs](https://github.com/fdehau/tui-rs)
 - [ ] Improve parsing of asm file 
+- [ ] Build for x86_64 Apple
 
