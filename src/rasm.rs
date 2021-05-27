@@ -1,11 +1,13 @@
 use std::{cmp::{max, min}, path::Path};
 use std::collections::HashMap;
+use super::EnvArgs;
 pub mod exec;
 pub struct SymbolTable {
     table : HashMap<String,usize>,
     pub labels : usize,
     min_addr : u16,
     max_addr : u16,
+    pub num_vars : usize,
 
     
 }
@@ -15,7 +17,8 @@ impl SymbolTable {
             table : HashMap::new(),
             labels : 0,
             min_addr : 0,
-            max_addr : 0
+            max_addr : 0,
+            num_vars : 0,
         }
     }
     pub fn add_var(&mut self,ident : String) {
@@ -25,10 +28,11 @@ impl SymbolTable {
         let l = self.table.len();
         if !self.table.contains_key(&ident) {
             self.table.insert(ident, l);
+            self.num_vars += 1;
         }
     }
-    pub fn add_label(&mut self,label : String,line : usize) {
-        self.table.insert(label,line);
+    pub fn add_label(&mut self, k : String, v : usize) {
+        self.table.insert(k, v);
         self.labels += 1;
     }
     pub fn get(&self,key : String) -> u16 {
@@ -53,124 +57,126 @@ impl Code {
     pub fn new(table : SymbolTable,code : Vec<Instruction>,debug_info : Vec<(usize,String)>) -> Self {
         Self {table,code,debug_info}
     }
-    pub fn get(&self,i : usize) -> (&Instruction,&(usize,String)) {
-        (&self.code[i],&self.debug_info[i])
+    pub fn get(&self,i : usize) -> Option<(&Instruction,&(usize,String))>
+    {
+        if let Some(v) = self.code.get(i) {
+            Some((v,&self.debug_info[i]))
+        }
+        else {
+            None
+        }
     }
 }
 
-pub fn run(file : &Path) {
-    let code = build_code(&file); 
-    exec::execute(code);
+pub fn run(args : EnvArgs) {
+    let code = build_code(&args.file); 
+    exec::execute(code,args.style);
 }
-#[derive(Debug)]
+
+#[derive(Clone, Copy)]
+pub enum AdrMode {
+    Indexed,
+    Immediate,
+    Direct,
+    Indirect,
+}
+
+
+
+//#[derive(Debug)]
 pub enum Instruction {
     IO(bool),
-    LDD(u16),
-    LDM(i16),
-    LDI(u16), //Indirect addressing
+    LOAD {data : u16, adr_mode : AdrMode},
     LDR(i16), //Load into index register <imm> 
-    LDX(u16), //Indexed addressing 
     MOV     , //ACC -> IX lol 
-    SUBM(i16),
-    SUBA(u16),
+    SUB {rhs : u16, adr_mode : AdrMode},
     STO(u16),
-    ADDM(i16),
-    ADDA(u16),
+    ADD {rhs : u16, adr_mode : AdrMode},
     INC(bool), //true:ACC, false:IX
     DEC(bool), //true:ACC, false:IX
     LSL(u16),  //logical shift left 
     LSR(u16),  //logical shift right
-    XOR(u16), //XOR with contents of address 
-    XORM(i16),//XOR with immediate value
-    OR(i16),  //XOR with immediate value 
-    ORA(u16), //Xor with contents of address
-    CMPA(u16),
-    CMPM(i16),
-    JPEM(u16),
-    JPEA(u16),
-    JPNM(u16),
-    JPNA(u16),
+    XOR {rhs : u16, adr_mode : AdrMode},
+    OR {rhs : u16, adr_mode : AdrMode},
+    CMP {rhs : u16, adr_mode : AdrMode},
+    JPE {addr : u16, adr_mode : AdrMode},
+    JPN {addr : u16, adr_mode : AdrMode},
     END,
     UNKNOWN,
 
 
 }
 impl Instruction {
-    pub fn new(opcode : String,addr : u16) -> Self {
+    pub fn new(opcode : String,rhs : u16) -> Self {
         //handle sto
         //all addresses have to be offset
         //TODO:handle acc and ix in a better way?
         if &opcode == "STO" {
-            return Self::STO(addr)
+            return Self::STO(rhs)
         }
-        //
+        let adr_mode = AdrMode::Direct;
         match opcode.chars().nth(0).unwrap() {
-            'L' => Instruction::load_instruction(opcode,addr),
-            'S' => Instruction::SUBA(addr),
-            'A' => Instruction::ADDA(addr),
-            'I' => Instruction::INC(addr == 0), //Acc is 0 in symtable
-            'D' => Instruction::DEC(addr == 0),
-            'C' => Instruction::CMPA(addr),
-            'X' => Instruction::XOR(addr),
-            'O' => Instruction::ORA(addr),
+            'L' => Instruction::load_instruction(opcode,rhs),
+            'S' => Instruction::SUB {rhs,adr_mode},
+            'A' => Instruction::ADD {rhs,adr_mode},
+            'I' => Instruction::INC(rhs == 0), //Acc is 0 in symtable
+            'D' => Instruction::DEC(rhs == 0),
+            'C' => Instruction::CMP{rhs,adr_mode},
+            'X' => Instruction::XOR{rhs,adr_mode},
+            'O' => Instruction::OR {rhs,adr_mode},
             'M' => Instruction::MOV,
-            'J' => Instruction::jmp_instruction_addr(opcode,addr),
+            'J' => Instruction::jmp_instruction(opcode,rhs,adr_mode),
             'E' => Instruction::END,
              _  => Instruction::UNKNOWN,
 
         }
     }
-    pub fn with_imm(opcode : String, imm : i16) -> Self {
+    pub fn with_imm(opcode : String, rhs : u16) -> Self {
         let first_char = opcode.chars().nth(0).unwrap();
-        
+        let adr_mode = AdrMode::Immediate;
         match first_char {
             'L' => {
                 if opcode.chars().nth(1).unwrap() == 'S' {
                     if opcode.chars().nth(2).unwrap() == 'R' {
-                        Instruction::LSR(imm as u16)
+                        Instruction::LSR(rhs)
                     }else {
-                        Instruction::LSL(imm as u16)
+                        Instruction::LSL(rhs)
                     }   
                 }else {
-                    Self::load_instruction(opcode,imm as u16)
+                    Self::load_instruction(opcode,rhs)
                 }
             },
-            'S' => Instruction::SUBM(imm),
-            'A' => Instruction::ADDM(imm),
-            'C' => Instruction::CMPM(imm),
-            'X' => Instruction::XORM(imm),
-            'O' => Instruction::OR(imm),
-            'J' => Self::jmp_instruction_imm(opcode,imm as u16),
+
+            'S' => Instruction::SUB{rhs,adr_mode},
+            'A' => Instruction::ADD{rhs,adr_mode},
+            'C' => Instruction::CMP{rhs,adr_mode},
+            'X' => Instruction::XOR{rhs,adr_mode},
+            'O' => Instruction::OR{rhs,adr_mode},
+            'J' => Self::jmp_instruction(opcode,rhs,adr_mode),
              _  => Instruction::UNKNOWN,
 
         }
     }
     fn load_instruction(opcode : String,data : u16) -> Self {
         match opcode.chars().last().expect("Error on load instruction") {
-            'D' => Instruction::LDD(data),
-            'M' => Instruction::LDM(data as i16),
-            'R' => Instruction::LDR(data as i16),
-            'I' => Instruction::LDI(data),
-            'X' => Instruction::LDX(data),
+            'D' => Instruction::LOAD{data,adr_mode : AdrMode::Direct},
+            'M' => Instruction::LOAD{data,adr_mode : AdrMode::Immediate},
+            'R' => Instruction::LDR(data as i16), //Loads into register
+            'I' => Instruction::LOAD{data, adr_mode : AdrMode::Indirect},
+            'X' => Instruction::LOAD{data, adr_mode : AdrMode::Indexed},
              _  => Instruction::UNKNOWN,
         }
     }
-    fn jmp_instruction_addr(opcode : String,data : u16) -> Self {
+    fn jmp_instruction(opcode : String,addr : u16,adr_mode : AdrMode) -> Self {
     
         match opcode.chars().nth(2).expect("Error on Jump instruction") {
-            'E' => Instruction::JPEA(data),
-            'N' => Instruction::JPNA(data),
+            'E' => Instruction::JPE {addr,adr_mode},
+            'N' => Instruction::JPN {addr,adr_mode},
             
              _  => Instruction::UNKNOWN,
         }
     }
-    fn jmp_instruction_imm(opcode : String,imm : u16) -> Self {
-        match opcode.chars().nth(2).expect("Error on Jump instruction") {
-            'E' => Instruction::JPEM(imm),
-            'N' => Instruction::JPNM(imm),
-             _  => Instruction::UNKNOWN,
-        }
-    }
+    
 }
 fn build_code(file : &Path) -> Code {
     let mut table = SymbolTable::new();
@@ -202,7 +208,7 @@ fn build_code(file : &Path) -> Code {
         }
         if line.ends_with(":") {
             let pos = line.rfind(":").unwrap();
-            table.add_label(line[..pos].to_string(),index);
+            table.add_label(line[..pos].trim().to_string(),index);
             continue;
         }
         //code.push(line.chars().skip_while(|c| !c.is_alphabetic()).collect());
@@ -219,7 +225,7 @@ fn build_code(file : &Path) -> Code {
                 .collect::<String>();
         let n = opcode.len(); // presumably 3
         
-        let ident = line.split_at(n + 1).1;
+        let ident = line.split_at(n + 1).1.trim();
         //immediate addresses
         if !ident.starts_with("#") {
         
@@ -231,7 +237,7 @@ fn build_code(file : &Path) -> Code {
             }else 
             {
                 let p = p.unwrap();
-                code.push(Instruction::with_imm(opcode,p));
+                code.push(Instruction::with_imm(opcode,p as u16));
                 table.min_addr = min(table.min_addr, p as u16);
                 table.max_addr = max(table.max_addr, p as u16);
                 debug_info.push((index,line.to_string()));
@@ -248,7 +254,7 @@ fn build_code(file : &Path) -> Code {
                 _       => panic!("Immediate value not formatted correctly")
             };
             let imm = imm.expect("Error while parsing immediate value");
-            code.push(Instruction::with_imm(opcode.to_string(), imm));
+            code.push(Instruction::with_imm(opcode.to_string(), imm as u16));
             debug_info.push((index,line.to_string()));
             continue;
         }

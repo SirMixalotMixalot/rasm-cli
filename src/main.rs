@@ -1,8 +1,7 @@
 use std::{borrow::Cow, env, path::PathBuf};
 mod rasm;
 fn main() {
-    let args : Vec<_> = env::args().collect();
-    let file = match handle_args(args) {
+    let envargs = match handle_args(env::args()) {
         Ok(f) => f,
         Err(e) => {
             println!("{}",&e);
@@ -11,34 +10,65 @@ fn main() {
             std::process::exit(1)
         }
     };
-    rasm::run(&file);
+
+    rasm::run(envargs);
 
 }
 
 const USAGE : &'static str =
 r"
 USAGE:
-    ./rasm-cli.exe -h | <Path to .rasm file>
+    ./rasm-cli.exe <options> <Path to .rasm file>
 OPTIONS:
     -h | --help : help
+    -b | --binary : show acc and ix in binary 
+    -x | --hex : show acc and ix in hexadecimal
 Note:
     Vertical bar '|' means 'or'
 
 ";
+pub enum DisplayStyle {
+    Denary,
+    Binary,
+    Hex,
+}
+pub struct EnvArgs {
+    file : PathBuf,
+    style : DisplayStyle,
 
-fn handle_args<'a>(args : Vec<String>) -> Result<PathBuf,Cow<'static,str>> {
-    if args.len() - 1 != 1 {
-        return Err(Cow::Borrowed("Path to rasm file must be specified or '-h' flag only"));
+}
+fn handle_args<'a>(mut args : env::Args) -> Result<EnvArgs,Cow<'static,str>> {
+    
+    let mut file = PathBuf::default();
+    let mut style = DisplayStyle::Denary;
+    args.next().unwrap();
+    for arg in args {
+        if arg.starts_with("-") {
+            style = match &arg[1..] {
+                "h" | "-help" => {
+                    println!("{}",USAGE);
+                    std::process::exit(1);
+                },
+                "b" | "-bin"  => {
+                    DisplayStyle::Binary
+                },
+                "x" | "-hex"  => {
+                    DisplayStyle::Hex
+                },
+                _   => {
+                    return Err(Cow::Borrowed("Unkown command line flag"));
+                    
+                }
+            }
+        }else if arg.ends_with(".rasm") || arg.ends_with(".asm") {
+            file = arg.into();
+        }
+        
+    }
+    if !file.exists() {
+        Err(Cow::Borrowed("File specified could not be found or unknown commandline argument"))
+    }else {
+        Ok(EnvArgs {file,style})
+    }
 
-    }
-    let arg1 = args[1].clone();
-    if &arg1 == "-h" || &arg1 == "--help" {
-        println!("{}",USAGE);
-        std::process::exit(1);
-    }
-    let file_path : PathBuf = arg1.into(); // since first element is the executables name
-    if !file_path.exists() {
-        return Err(Cow::Owned(format!("{} does not exist!",file_path.to_str().unwrap())));
-    }
-    return Ok(file_path)
 }

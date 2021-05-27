@@ -1,25 +1,30 @@
-use super::{Code,Instruction};
+use crate::DisplayStyle;
+
+use super::{Code,Instruction,AdrMode};
 use std::fmt::{Display,Result,Formatter};
 use std::ops::{Index,IndexMut};
 pub struct Memory {
     min_addr : u16,
     mem : Vec<i16>,
+    num_vars: usize,
 }
 
 impl Memory {
-    pub fn new(min_addr : u16) -> Self {
+    pub fn new(min_addr : u16,num_vars : usize) -> Self {
         Memory {
             min_addr,
             mem : Vec::with_capacity(16),
+            num_vars,
         }
     }
 }
+
 impl Index<usize> for Memory {
     type Output = i16;
     fn index(&self, index: usize) -> &Self::Output {
-        if index as u16 > self.min_addr {
+        if index as u16 > self.min_addr && self.min_addr >= 200 {
             let i = index - self.min_addr as usize;
-            &self.mem[i]
+            &self.mem[i + self.num_vars]
         }else {
             &self.mem[index]
         }
@@ -27,13 +32,13 @@ impl Index<usize> for Memory {
 }
 impl IndexMut<usize> for Memory {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-         if index as u16 > self.min_addr {
+         if index as u16 > self.min_addr && self.min_addr >= 200 {
             let i = index - self.min_addr as usize;
             if i >= self.mem.len() {
-                self.mem.resize(i + 1,0);
+                self.mem.resize(i + self.num_vars,0);
             }
             
-            &mut self.mem[i]
+            &mut self.mem[i + self.num_vars]
         }else {
             if index >= self.mem.len() {
                 self.mem.resize(index + 1, 0);
@@ -50,17 +55,20 @@ pub struct CPU {
     done : bool,
     flag_register : Flags,
     pub memory : Memory, 
+    disp_style : DisplayStyle,
 }
 
+
 impl CPU {
-    pub fn new(min_addr : u16) -> Self {
+    pub fn new(min_addr : u16,num_vars : usize, style : DisplayStyle) -> Self {
         CPU {
             acc : 0,
             ix  : 0,
             pc  : 0,
             done : false,
             flag_register : Flags::new(),
-            memory : Memory::new(min_addr),
+            memory : Memory::new(min_addr,num_vars),
+            disp_style : style,
         }
     }
     pub fn done(&self) -> bool {
@@ -70,71 +78,73 @@ impl CPU {
         use Instruction::*;
         self.pc += 1;
         match *instr {
-            LDD(addr) => self.ldd(addr),
-            LDM(imm)  => self.ldm(imm),
-            LDI(addr) => self.ldi(addr),
-            LDR(imm)  => self.ldr(imm),
-            LDX(addr) => self.ldx(addr),
+            LOAD{data,adr_mode} => self.load(data, adr_mode),
+            LDR(x)    => self.ldr(x),
             MOV       => self.ix = self.acc,
             IO(b)     => self.io(b),
-            SUBM(imm) => self.subm(imm),
-            SUBA(addr) => self.suba(addr),
+            SUB{rhs,adr_mode}  => self.sub(rhs as i16,adr_mode),
             STO(addr)  => self.sto(addr),
-            ADDM(imm)  => self.addm(imm),
-            ADDA(addr) => self.adda(addr),
+            ADD{rhs,adr_mode}  => self.add(rhs as i16,adr_mode),
             INC(b)     => self.addn(b,1),
             DEC(b)     => self.addn(b,-1),
             LSL(imm)   => self.lsl(imm),
             LSR(imm)   => self.lsr(imm),
-            XORM(imm)  => self.xorm(imm),
-            XOR(addr)  => self.xora(addr),
-            OR(imm)    => self.or(imm),
-            ORA(addr)  => self.ora(addr),
-            CMPA(addr)  => self.cmpa(addr),
-            CMPM(imm)   => self.cmpm(imm),
+            XOR {rhs,adr_mode}  => self.xor(rhs,adr_mode),
+            OR {rhs,adr_mode}   => self.or(rhs,adr_mode),
+            CMP {rhs,adr_mode}  => self.cmp(rhs as i16,adr_mode), 
             END         => self.end(),
             UNKNOWN     => eprintln!("Unkown command!"),
             _           => self.jmp(instr),
         }
     }
+    fn load(&mut self,data : u16,addressing_mode : AdrMode) {
+        match addressing_mode {
+            AdrMode::Indirect => {
+                self.acc = self.memory[self.memory[data as usize] as usize];
+            },
+            AdrMode::Direct   => {
+                self.acc = self.memory[data as usize];
+            },
+            AdrMode::Indexed  => {
+                self.acc = self.memory[(data as i16 + self.ix) as usize];
+            },
+            AdrMode::Immediate => {
+                self.acc = data as i16;
+            },
+
+        }
+        self.flag_register.set_flags(Some(self.acc));
+    }
     fn lsl(&mut self, n : u16) {
         self.flag_register.set_flag(FLAGS::C,(self.acc as u16 & 0x8000u16) != 0 );
-        self.acc <<= n;
+        let x = (self.acc as u16) << n;
+        self.acc = x as i16;
     }
     fn lsr(&mut self, n : u16) {
         self.flag_register.set_flag(FLAGS::C, (self.acc & 0x1) != 0);
-        self.acc >>= n;
-    }
-    fn ldi(&mut self,addr : u16) {
-        let d = self.memory[addr as usize];
-        self.acc = self.memory[d as usize];
+        let x = self.acc as u16 >> n;
+        self.acc = x as i16;
     }
     fn ldr(&mut self,imm : i16) {
         self.ix = imm;
     }
-    fn ldx(&mut self,addr : u16) {
-        self.acc = self.memory[(addr + self.ix as u16) as usize];
-    }
-    fn xorm(&mut self, imm : i16) {
+    fn xor(&mut self, imm : u16,adr_mode : AdrMode) {
+        let imm = self.get_data(imm, adr_mode);
         self.flag_register.set_flags(Some(self.acc ^ imm));
-        self.acc ^= imm;
+        self.acc ^= imm ;
     }
-    fn xora(&mut self, addr : u16) {
-        self.xorm(self.memory[addr as usize]);
+    fn get_data(&self,i : u16,adr_mode : AdrMode) -> i16 {
+        match adr_mode {
+            AdrMode::Immediate => i as i16,
+            AdrMode::Direct    => self.memory[i as usize],
+            _                  => unreachable!(),
+        }
     }
-    fn or(&mut self, imm : i16) {
+    fn or(&mut self, imm : u16,adr_mode : AdrMode) {
+        let imm = self.get_data(imm,adr_mode);
         self.flag_register.set_flags(Some(self.acc | imm));
         self.acc |= imm;
         
-    }
-    fn ora(&mut self, addr : u16) {
-        self.or(self.memory[addr as usize]);
-    }
-    fn ldd(&mut self,addr : u16) {
-        self.acc = self.memory[addr as usize];
-    }
-    fn ldm(&mut self, imm : i16) {
-        self.acc = imm;
     }
     fn io(&mut self, inp : bool) {
         use std::io;
@@ -143,64 +153,63 @@ impl CPU {
             let mut buffer = String::new();
             io::stdin().read_line(&mut buffer).unwrap();
             self.acc = buffer.chars().nth(0).unwrap() as u32 as i16;
+            self.flag_register.set_flags(Some(self.acc));
         }else {
             println!("{}",self.acc as u8 as char)
         }
     }
-    fn subm(&mut self, imm : i16) {
+    fn sub(&mut self, imm : i16, adr_mode : AdrMode) {
+        let imm = self.get_data(imm as u16, adr_mode);
+
         let res = self.acc.checked_sub(imm);
         self.flag_register.set_flags(res);
         self.acc -= imm;
     }
-    fn suba(&mut self,addr: u16) {
-        self.subm(self.memory[addr as usize]);
-    }
+
     fn sto(&mut self,addr : u16) {
         self.memory[addr as usize] = self.acc;
     }
-    fn addm(&mut self, imm : i16) {
-        
+    fn add(&mut self, imm : i16,adr_mode : AdrMode) {
+        let imm = self.get_data(imm as u16, adr_mode);
         self.flag_register.set_flags(
                 self.acc.checked_add(imm)
             );
         self.acc += imm;
     }
-    fn adda(&mut self, addr : u16) {
-        self.addm(self.memory[addr as usize]);
-    }
+    
     fn addn(&mut self, acc : bool, n : i16) {
         if acc {
+            self.flag_register.set_flags(self.acc.checked_add(n));
             self.acc += n;
         }else {
             self.ix += n;
         }
     }
-    fn cmpm(&mut self,imm : i16) {
+    fn cmp(&mut self,imm : i16,adr_mode : AdrMode) {
+        let imm = self.get_data(imm as u16, adr_mode);
         self
             .flag_register.
             set_flags(Some(self.acc - imm));
     }
-    fn cmpa(&mut self,addr : u16) {
-        self.cmpm(self.memory[addr as usize]);
-    }
+
     fn end(&mut self) {
         println!("-------Program ending---------");
         self.done = true;
     }
     fn jmp(&mut self, instr : &Instruction) {
-        let ni = match instr {
-            &Instruction::JPEM(x) | &Instruction::JPEA(x) => {
+        let ni = match *instr {
+            Instruction::JPE {addr,..} => {
                 if self.flag_register.get_flag(FLAGS::Z) {
-                    x
+                    addr
                 }else {
                     self.pc 
                 }
             },
-            &Instruction::JPNM(x) | &Instruction::JPNA(x) => {
+            Instruction::JPN {addr,..} => {
                 if self.flag_register.get_flag(FLAGS::Z) {
                     self.pc
                 }else {
-                    x
+                    addr
                 }
             },
             _ => unreachable!()
@@ -213,7 +222,9 @@ impl CPU {
 
 impl Display for CPU {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-       write!(f, 
+    match self.disp_style{
+
+    DisplayStyle::Denary => {   write!(f, 
 r"
  ----------------------------------
 |              CPU                 |
@@ -234,19 +245,74 @@ r"
                self.flag_register.get_flag(FLAGS::Z) as u8,
                self.flag_register.get_flag(FLAGS::C) as u8,
                self.acc,
-               self.ix)
+               self.ix )
 
-    }
 
+    },
+    DisplayStyle::Binary => {
+       write!(f, 
+r"
+ ---------------------------------------------------
+|                   CPU                             |
+|    FLAGS                          PC              |
+|    ---------                    _______           |
+|   | N V Z C |                  | {:^5} |          |
+|   | {} {} {} {} |                   -------           | 
+|    ---------                                      |
+|    ACC                               IX           |
+|  __________________          __________________   |
+| |{:#018b}|        |{:#018b}|  |
+|  ------------------          ------------------   |  
+ --------------------------------------------------- ",
+                
+               self.pc,
+               self.flag_register.get_flag(FLAGS::N) as u8,
+               self.flag_register.get_flag(FLAGS::V) as u8,
+               self.flag_register.get_flag(FLAGS::Z) as u8,
+               self.flag_register.get_flag(FLAGS::C) as u8,
+               self.acc as u16,
+               self.ix as u16)
+
+
+
+    },
+    DisplayStyle::Hex => 
+    {
+       write!(f, 
+r"
+ ----------------------------------
+|              CPU                 |
+|    FLAGS                PC       |
+|    ---------           _______   |
+|   | N V Z C |         |{:>5}  |  |
+|   | {} {} {} {} |          -------   | 
+|    ---------                     |
+|    ACC                 IX        |
+|  ________          _________     |
+| |{:#08x}|        |{:#08x} |    |
+|  --------          ---------     |  
+ ---------------------------------- ",
+                
+               self.pc,
+               self.flag_register.get_flag(FLAGS::N) as u8,
+               self.flag_register.get_flag(FLAGS::V) as u8,
+               self.flag_register.get_flag(FLAGS::Z) as u8,
+               self.flag_register.get_flag(FLAGS::C) as u8,
+               self.acc as u16,
+               self.ix as u16)
+
+
+        }
+        
+      }
+   }
 }
-
-
-
+//Bit masks
 enum FLAGS {
-    Z = (1<<3),
-    N = (1<<2),
-    V = (1<<1),
-    C = (1<<0),
+    Z = 0b1000,
+    N = 0b0100,
+    V = 0b0010,
+    C = 0b0001,
 }
 struct Flags { 
      //zero
@@ -281,12 +347,13 @@ impl Flags {
    }
 
 }
-pub fn execute(code : Code ) {
+pub fn execute(code : Code, style : DisplayStyle ) {
     use std::io;
-    let mut cpu = CPU::new(code.table.min_addr);
+    let mut cpu = CPU::new(code.table.min_addr,code.table.num_vars,style);
     let mut check_input = true;
     'main : while !cpu.done() {
-        let (instr,actual_code) = code.get(cpu.pc as usize);
+        let (instr,actual_code) = code.get(cpu.pc as usize)
+            .expect("Program ending...Remember to add 'END' to the end of your program");
         println!("-----------    Instruction Executing : {}   ------------",actual_code.1);
         cpu.execute(&instr);
         println!("{}",cpu);
@@ -302,7 +369,7 @@ Press:
                 if buf.trim().is_empty() {
                     break 'input
                 }
-                match buf.chars().nth(0).unwrap() {
+                match buf.chars().nth(0).unwrap().to_ascii_lowercase() {
                     'q' => break 'main,
                     'c' => {check_input = false; break 'input},
                     _  => println!("Unrecognized command"),
