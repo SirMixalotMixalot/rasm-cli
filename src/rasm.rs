@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use super::EnvArgs;
 pub mod exec;
 pub mod cpu;
+pub mod computer;
+pub mod mem;
 pub mod instr;
 pub mod ui;
 use instr::{Instruction,AdrMode};

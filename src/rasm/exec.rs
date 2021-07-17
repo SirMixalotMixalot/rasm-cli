@@ -1,5 +1,5 @@
 use crate::DisplayStyle;
-use super::{Code,cpu::*};
+use super::{Code,cpu::*,mem::Memory,computer::ComputerBuilder};
 
 pub fn execute(code : Code, style : DisplayStyle ) {
     use std::io;
@@ -14,7 +14,7 @@ pub fn execute(code : Code, style : DisplayStyle ) {
     //let mut cpu = CPU::new(code.table.min_addr,code.table.num_vars,style,io::stdout(),io::stdin());
     let mut check_input = true;
     'main : while !computer.cpu.done() {
-        let (instr,actual_code) = code.get(computer.cpu.pc as usize)
+        let (instr,actual_code) = code.get(computer.cpu.pc() as usize)
             .expect("Program ending...Remember to add 'END' to the end of your program");
         println!("-----------    Instruction Executing : {}   ------------",actual_code.1);
         computer.cpu.execute(&instr);
