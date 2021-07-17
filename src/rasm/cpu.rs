@@ -1,8 +1,10 @@
+
 use super::{Instruction,AdrMode};
 use crate::DisplayStyle;
 use std::{
     ops::{Index,IndexMut}
-    ,fmt::{Display,Formatter,Result}
+    ,fmt::{Display,Formatter,Result},
+    io::{Read,Write}
 };
 
 
@@ -51,27 +53,69 @@ impl IndexMut<usize> for Memory {
        
     }
 }
-pub struct CPU {
+pub struct CPU<'a, I, O>
+where
+    I : Read,
+    O : Write {
     acc : i16,
     ix : i16,
     pub pc : u16,
     done : bool,
     flag_register : Flags,
-    pub memory : Memory, 
+    pub memory : &'a mut Memory, 
+    display    : O,
+    input      : I
+}
+pub struct Computer<'a,I : Read,O : Write> {
     disp_style : DisplayStyle,
+    pub cpu        : CPU<'a,I,O>
+}
+pub struct ComputerBuilder<'a,I : Read,O : Write>  {
+    disp_style : Option<DisplayStyle>,
+    cpu        : Option<CPU<'a,I,O>>
+}
+impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
+    pub fn new() -> Self {
+
+        ComputerBuilder {
+            disp_style : None,
+            cpu  : None
+            
+        }
+    }
+    pub fn display_style(mut self,style : DisplayStyle) -> Self {
+        self.disp_style = Some(style);
+        self
+    }
+    pub fn attach_cpu(mut self, cpu : CPU<'a,I,O>) -> Self {
+        self.cpu = Some(cpu);
+        self
+    }
+    pub fn build(self) -> std::result::Result<Computer<'a,I,O>,&'static str> {
+        if self.cpu.is_none() || self.disp_style.is_none() {
+            return Err("Parts on CPU missing")
+        }
+       Ok( Computer {
+            cpu : self.cpu.unwrap(),
+            disp_style : self.disp_style.unwrap()
+        })
+    }
 }
 
-
-impl CPU {
-    pub fn new(min_addr : u16,num_vars : usize, style : DisplayStyle) -> Self {
+impl<'a,I,O> CPU<'a,I,O>
+where
+    I : Read,
+    O : Write {
+    pub fn new(memory : &'a mut Memory, display : O, input : I) -> Self {
         CPU {
             acc : 0,
             ix  : 0,
             pc  : 0,
             done : false,
             flag_register : Flags::new(),
-            memory : Memory::new(min_addr,num_vars),
-            disp_style : style,
+            memory,
+            display,
+            input
         }
     }
     pub fn done(&self) -> bool {
@@ -82,22 +126,22 @@ impl CPU {
         self.pc += 1;
         match *instr {
             LOAD{data,adr_mode} => self.load(data, adr_mode),
-            LDR(x)    => self.ldr(x),
-            MOV       => self.ix = self.acc,
-            IO(b)     => self.io(b),
-            SUB{rhs,adr_mode}  => self.sub(rhs as i16,adr_mode),
-            STO(addr)  => self.sto(addr),
-            ADD{rhs,adr_mode}  => self.add(rhs as i16,adr_mode),
-            INC(b)     => self.addn(b,1),
-            DEC(b)     => self.addn(b,-1),
-            LSL(imm)   => self.lsl(imm),
-            LSR(imm)   => self.lsr(imm),
+            LDR(x)              => self.ldr(x),
+            MOV                 => self.ix = self.acc,
+            IO(b)               => self.io(b),
+            SUB{rhs,adr_mode}   => self.sub(rhs as i16,adr_mode),
+            STO(addr)           => self.sto(addr),
+            ADD{rhs,adr_mode}   => self.add(rhs as i16,adr_mode),
+            INC(b)              => self.addn(b,1),
+            DEC(b)              => self.addn(b,-1),
+            LSL(imm)            => self.lsl(imm),
+            LSR(imm)            => self.lsr(imm),
             XOR {rhs,adr_mode}  => self.xor(rhs,adr_mode),
             OR {rhs,adr_mode}   => self.or(rhs,adr_mode),
             CMP {rhs,adr_mode}  => self.cmp(rhs as i16,adr_mode), 
-            END         => self.end(),
-            UNKNOWN     => eprintln!("Unkown command!"),
-            _           => self.jmp(instr),
+            END                 => self.end(),
+            UNKNOWN             => eprintln!("Unkown command!"),
+            _                   => self.jmp(instr),
         }
     }
     fn load(&mut self,data : u16,addressing_mode : AdrMode) {
@@ -150,15 +194,15 @@ impl CPU {
         
     }
     fn io(&mut self, inp : bool) {
-        use std::io;
+        
         if inp {
             
-            let mut buffer = String::new();
-            io::stdin().read_line(&mut buffer).unwrap();
-            self.acc = buffer.chars().nth(0).unwrap() as u32 as i16;
+            let mut buffer = [0;3];
+            self.input.read_exact(&mut buffer).unwrap();
+            self.acc = buffer[0] as char as i16;
             self.flag_register.set_flags(Some(self.acc));
         }else {
-            println!("{}",self.acc as u8 as char)
+            write!(&mut self.display,"{}",self.acc as u8 as char).unwrap();
         }
     }
     fn sub(&mut self, imm : i16, adr_mode : AdrMode) {
@@ -223,7 +267,7 @@ impl CPU {
 
 }
 
-impl Display for CPU {
+impl<'a,I : Read,O : Write> Display for Computer<'a,I,O> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
     match self.disp_style{
 
@@ -242,13 +286,13 @@ r"
 |  --------          ---------     |  
  ---------------------------------- ",
                 
-               self.pc,
-               self.flag_register.get_flag(FLAGS::N) as u8,
-               self.flag_register.get_flag(FLAGS::V) as u8,
-               self.flag_register.get_flag(FLAGS::Z) as u8,
-               self.flag_register.get_flag(FLAGS::C) as u8,
-               self.acc,
-               self.ix )
+               self.cpu.pc,
+               self.cpu.flag_register.get_flag(FLAGS::N) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::V) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::Z) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::C) as u8,
+               self.cpu.acc,
+               self.cpu.ix )
 
 
     },
@@ -268,13 +312,13 @@ r"
 |  ------------------          ------------------   |  
  --------------------------------------------------- ",
                 
-               self.pc,
-               self.flag_register.get_flag(FLAGS::N) as u8,
-               self.flag_register.get_flag(FLAGS::V) as u8,
-               self.flag_register.get_flag(FLAGS::Z) as u8,
-               self.flag_register.get_flag(FLAGS::C) as u8,
-               self.acc as u16,
-               self.ix as u16)
+               self.cpu.pc,
+               self.cpu.flag_register.get_flag(FLAGS::N) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::V) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::Z) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::C) as u8,
+               self.cpu.acc as u16,
+               self.cpu.ix as u16)
 
 
 
@@ -296,13 +340,13 @@ r"
 |  --------          ---------     |  
  ---------------------------------- ",
                 
-               self.pc,
-               self.flag_register.get_flag(FLAGS::N) as u8,
-               self.flag_register.get_flag(FLAGS::V) as u8,
-               self.flag_register.get_flag(FLAGS::Z) as u8,
-               self.flag_register.get_flag(FLAGS::C) as u8,
-               self.acc as u16,
-               self.ix as u16)
+               self.cpu.pc,
+               self.cpu.flag_register.get_flag(FLAGS::N) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::V) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::Z) as u8,
+               self.cpu.flag_register.get_flag(FLAGS::C) as u8,
+               self.cpu.acc as u16,
+               self.cpu.ix as u16)
 
 
         }

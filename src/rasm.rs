@@ -4,6 +4,7 @@ use super::EnvArgs;
 pub mod exec;
 pub mod cpu;
 pub mod instr;
+pub mod ui;
 use instr::{Instruction,AdrMode};
 pub struct SymbolTable {
     table : HashMap<String,usize>,
@@ -100,65 +101,67 @@ fn build_code(file : &Path) -> Code {
             }
             line = line.split_at(n).0;
         }
-        if line == "END" {
-            code.push(Instruction::END);
-            debug_info.push((index,line.to_string()));
-            continue;
-        }
         if line.ends_with(":") {
             let pos = line.rfind(":").unwrap();
             table.add_label(line[..pos].trim().to_string(),index);
             continue;
         }
-        //code.push(line.chars().skip_while(|c| !c.is_alphabetic()).collect());
-        //tabxxxspace---
-        if line.ends_with("IN") || line.ends_with("OUT") {
-            code.push(Instruction::IO(line.ends_with("IN")));
-            debug_info.push((index,line.to_string()));
-            continue;
-        }
-    
-
-        let opcode = line.chars()
-                .take_while(|c| c.is_alphabetic())
-                .collect::<String>();
-        let n = opcode.len(); // presumably 3
-        
-        let ident = line.split_at(n + 1).1.trim();
-        //immediate addresses
-        if !ident.starts_with("#") {
-        
-            let p = ident.parse::<i16>();
-            if p.is_err() {
-                table.add_var(ident.to_string());
-                
-                
-            }else 
-            {
-                let p = p.unwrap();
-                code.push(Instruction::with_imm(opcode,p as u16));
-                table.min_addr = min(table.min_addr, p as u16);
-                table.max_addr = max(table.max_addr, p as u16);
-                debug_info.push((index,line.to_string()));
-                continue;
-            }
-        }
-        //dealing with immediate values
-        if ident.starts_with("#") {
-            let fstring = &ident[1..];
-            let imm  = match fstring.chars().nth(0).unwrap() {
-                'B' => i16::from_str_radix(&fstring[2..],2),
-                '&' => i16::from_str_radix(&fstring[2..], 16),
-                '0'..='9' => i16::from_str_radix(fstring, 10),
-                _       => panic!("Immediate value not formatted correctly")
-            };
-            let imm = imm.expect("Error while parsing immediate value");
-            code.push(Instruction::with_imm(opcode.to_string(), imm as u16));
-            debug_info.push((index,line.to_string()));
-            continue;
-        }
-        code.push(Instruction::new(opcode,table.get(ident.to_string())));
+        code.push(str_to_instr(&mut table,line));
         debug_info.push((index,line.to_string()));
     }
     Code::new(table,code,debug_info)
+}
+pub fn str_to_instr(table : &mut SymbolTable,line : &str) -> Instruction {
+    if line == "END" {
+         return Instruction::END
+      
+    }
+
+    //code.push(line.chars().skip_while(|c| !c.is_alphabetic()).collect());
+    //tabxxxspace---
+    else if line.ends_with("IN") || line.ends_with("OUT") {
+         return Instruction::IO(line.ends_with("IN"))
+        
+    }
+
+
+    let opcode = line.chars()
+            .take_while(|c| c.is_alphabetic())
+            .collect::<String>();
+    let n = opcode.len(); // presumably 3
+    
+    let ident = line.split_at(n + 1).1.trim();
+    //immediate addresses
+    if !ident.starts_with("#") {
+    
+        let p = ident.parse::<i16>();
+        if p.is_err() {
+            table.add_var(ident.to_string());
+        }else 
+        {
+            let p = p.unwrap();
+            table.min_addr = min(table.min_addr, p as u16);
+            table.max_addr = max(table.max_addr, p as u16);
+            return Instruction::with_imm(opcode,p as u16)
+
+        }
+    }
+    //dealing with immediate values
+    if ident.starts_with("#") {
+        let fstring = &ident[1..];
+        let imm  = match fstring.chars().nth(0).unwrap() {
+            'B'       => i16::from_str_radix(&fstring[2..],2),
+            '&'       => i16::from_str_radix(&fstring[2..], 16),
+            '0'..='9' => i16::from_str_radix(fstring, 10),
+            _         => {
+                            eprintln!("Incorrectly formated immediate ({})", line);
+                            std::process::exit(-1);
+            }        
+        };
+        let imm = imm.expect("Error while parsing immediate value");
+        return Instruction::with_imm(opcode, imm as u16)
+    }
+    Instruction::new(opcode,table.get(ident.to_string()))
+    
+
 }
