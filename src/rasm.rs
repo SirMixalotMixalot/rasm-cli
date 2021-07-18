@@ -6,7 +6,6 @@ pub mod cpu;
 pub mod computer;
 pub mod mem;
 pub mod instr;
-pub mod ui;
 use instr::{Instruction,AdrMode};
 pub struct SymbolTable {
     table : HashMap<String,usize>,
@@ -139,8 +138,7 @@ pub fn str_to_instr(table : &mut SymbolTable,line : &str) -> Instruction {
         let p = ident.parse::<i16>();
         if p.is_err() {
             table.add_var(ident.to_string());
-        }else 
-        {
+        }else{
             let p = p.unwrap();
             table.min_addr = min(table.min_addr, p as u16);
             table.max_addr = max(table.max_addr, p as u16);
