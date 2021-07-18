@@ -1,17 +1,25 @@
 use crate::DisplayStyle;
-
-use super::{Code,cpu::CPU};
+use super::{Code,cpu::*,mem::Memory,computer::ComputerBuilder};
 
 pub fn execute(code : Code, style : DisplayStyle ) {
     use std::io;
-    let mut cpu = CPU::new(code.table.min_addr,code.table.num_vars,style);
+
+    let mut mem  = Memory::new(code.table.min_addr,code.table.num_vars);
+    let cpu = CPU::new(&mut mem,io::stdout(),io::stdin());
+    let mut computer = ComputerBuilder::new()
+    .attach_cpu(cpu)
+    .display_style(style)
+    .build()
+    .unwrap();
+    //let mut cpu = CPU::new(code.table.min_addr,code.table.num_vars,style,io::stdout(),io::stdin());
     let mut check_input = true;
-    'main : while !cpu.done() {
-        let (instr,actual_code) = code.get(cpu.pc as usize)
+    'main : while !computer.cpu.done() {
+        let (instr,actual_code) = code.get(computer.cpu.pc() as usize)
             .expect("Program ending...Remember to add 'END' to the end of your program");
         println!("-----------    Instruction Executing : {}   ------------",actual_code.1);
-        cpu.execute(&instr);
-        println!("{}",cpu);
+        computer.cpu.execute(&instr);
+        
+        println!("{}",computer);
         if check_input {
             'input : loop {
                 let mut buf = String::new();
