@@ -47,7 +47,7 @@ fn handle_args<'a>(mut args : env::Args) -> Result<EnvArgs,Cow<'static,str>> {
             style = match &arg[1..] {
                 "h" | "-help" => {
                     println!("{}",USAGE);
-                    std::process::exit(1);
+                    std::process::exit(0);
                 },
                 "b" | "-bin"  => {
                     DisplayStyle::Binary

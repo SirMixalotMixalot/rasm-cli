@@ -1,27 +1,26 @@
-use std::{
-    
-    io::{Read,Write},
-    fmt::{Formatter,Result,Display},
-};
+
+use std::fmt::{Formatter,Result,Display};
 use super::{
     cpu::CPU,cpu::FLAGS
 };
 use crate::DisplayStyle;
 
-pub struct Computer<'a,I : Read,O : Write> {
+pub struct Computer<'a> {
     disp_style : DisplayStyle,
-    pub cpu        : CPU<'a,I,O>
+    pub cpu        : CPU<'a>,
 }
-pub struct ComputerBuilder<'a,I : Read,O : Write>  {
+
+pub struct ComputerBuilder<'a>  {
     disp_style : Option<DisplayStyle>,
-    cpu        : Option<CPU<'a,I,O>>
+    cpu        : Option<CPU<'a>>,
+
 }
-impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
+impl<'a> ComputerBuilder<'a> {
     pub fn new() -> Self {
 
         ComputerBuilder {
             disp_style : None,
-            cpu  : None
+            cpu  : None,
             
         }
     }
@@ -29,25 +28,26 @@ impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
         self.disp_style = Some(style);
         self
     }
-    pub fn attach_cpu(mut self, cpu : CPU<'a,I,O>) -> Self {
+    pub fn attach_cpu(mut self, cpu : CPU<'a>) -> Self {
         self.cpu = Some(cpu);
         self
     }
-    pub fn build(self) -> std::result::Result<Computer<'a,I,O>,&'static str> {
+    
+    pub fn build(self) -> std::result::Result<Computer<'a>,&'static str> {
         if self.cpu.is_none() || self.disp_style.is_none() {
-            return Err("Parts on CPU missing")
+            return Err("Parts on Computer missing")
         }
        Ok( Computer {
             cpu : self.cpu.unwrap(),
-            disp_style : self.disp_style.unwrap()
+            disp_style : self.disp_style.unwrap(),
         })
     }
 }
-impl<'a,I : Read,O : Write> Display for Computer<'a,I,O> {
+impl<'a> Display for Computer<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-    match self.disp_style{
+    let x = match self.disp_style{
 
-    DisplayStyle::Denary => {   write!(f, 
+    DisplayStyle::Denary => {   writeln!(f, 
 r"
  ----------------------------------
 |              CPU                 |
@@ -73,7 +73,7 @@ r"
 
     },
     DisplayStyle::Binary => {
-       write!(f, 
+       writeln!(f, 
 r"
  ---------------------------------------------------
 |                   CPU                             |
@@ -101,7 +101,7 @@ r"
     },
     DisplayStyle::Hex => 
     {
-       write!(f, 
+       writeln!(f, 
 r"
  ----------------------------------
 |              CPU                 |
@@ -127,6 +127,43 @@ r"
 
         }
         
+      };
+      //  _______________________
+      // | Addr : Name   | Value {16 bits/ 5 digits/ 4 higits (hex digits)}|
+      //
+      let max_len : u16 = match self.disp_style {
+            DisplayStyle::Denary =>  {
+                5
+            },
+            DisplayStyle::Binary => {
+                16
+            },
+            DisplayStyle::Hex => {
+                4
+            }
+      } ;
+      let max_len = std::cmp::max(max_len,10);
+      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1) as usize)?;
+      write!(f,"|{:^width$}|","Addresses",width=max_len as usize)?;
+      writeln!(f,"{:^width$}|","Contents",width=max_len as usize)?;
+      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1) as usize)?;
+      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1) as usize)?;
+      for addr in self.cpu.min_addr()..self.cpu.max_addr() {
+        
+        match self.disp_style {
+            DisplayStyle::Denary => {
+                writeln!(f,"|{:^width$}|{:^width$}|",addr,self.cpu.read(addr as usize),width=max_len as usize)?;
+                
+            },
+            DisplayStyle::Binary => {   
+                writeln!(f,"|{:^#width$b}|{:^#width$b}|",addr,self.cpu.read(addr as usize),width=max_len as usize)?;
+            },
+            DisplayStyle::Hex   => {
+                writeln!(f,"|{:^#width$x}|{:^#width$x}|",addr,self.cpu.read(addr as usize),width=max_len as usize)?;
+            }
+        }
       }
+      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1 ) as usize)?;
+      x
    }
 }
