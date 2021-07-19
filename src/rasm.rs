@@ -96,6 +96,9 @@ fn build_code(file : &Path) -> Code {
        //   Comments should start with ';' and are removed from the code
         
         let mut line = line.trim();
+        if line.len() == 0 {
+            continue;
+        }
         if let Some(n) = line.find(";") {
             if n == 0 {
                 continue;
@@ -160,6 +163,14 @@ pub fn str_to_instr(table : &mut SymbolTable,line : &str) -> Instruction {
         };
         let imm = imm.expect("Error while parsing immediate value");
         return Instruction::with_imm(opcode, imm as u16)
+    }
+    if ident.starts_with("'") {
+        let start = ident.find("'").unwrap();
+        //This should be a character constant so len == 1
+        let end = ident.rfind("'").unwrap();
+        assert_eq!(end - start,2);
+        let c = ident[start+1..end].chars().nth(0).unwrap();
+        return Instruction::with_imm(opcode, c as u8 as u16);
     }
     Instruction::new(opcode,table.get(ident.to_string()))
     
