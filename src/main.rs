@@ -15,7 +15,7 @@ fn main() {
 
 }
 
-const USAGE : &'static str =
+const USAGE : &str =
 r"
 USAGE:
     ./rasm-cli.exe <options> <Path to .rasm file>

@@ -95,8 +95,11 @@ fn build_code(file : &Path) -> Code {
        //   Comments should start with ';' and are removed from the code
         
         let mut line = line.trim();
+
         //Dealing with a comment, ignore if entire line is comment
         //or get rid of comment part of line
+
+
         if line.len() == 0 {
             continue;
         }
@@ -116,3 +119,4 @@ fn build_code(file : &Path) -> Code {
     }
     Code::new(table,code,debug_info)
 }
+

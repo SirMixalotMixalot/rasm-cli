@@ -12,7 +12,9 @@ Unzip it to a directory of your choice
 Go to that directory and on the command line (cmd/bash/etc...) type `./rasm-cli example.rasm` and it should work
 
 # Goals
-- [ ] Refactor code
+- Refactor code
+  - [X] Stage 1 - Splitting code up into units with a lower cohesion
+  - [ ] Stage 2 - Add tests
 - [ ] Improve tui using [tui-rs](https://github.com/fdehau/tui-rs)
 - [ ] Improve parsing of asm file 
 - [ ] Build for x86_64 Apple
