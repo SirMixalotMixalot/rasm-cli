@@ -6,7 +6,6 @@ pub mod cpu;
 pub mod computer;
 pub mod mem;
 pub mod instr;
-pub mod ui;
 use instr::{Instruction,AdrMode,str_to_instr};
 pub struct SymbolTable {
     table : HashMap<String,usize>,
@@ -98,6 +97,9 @@ fn build_code(file : &Path) -> Code {
         let mut line = line.trim();
         //Dealing with a comment, ignore if entire line is comment
         //or get rid of comment part of line
+        if line.len() == 0 {
+            continue;
+        }
         if let Some(n) = line.find(";") {
             if n == 0 {
                 continue;
