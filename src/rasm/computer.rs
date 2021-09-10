@@ -1,27 +1,33 @@
-use std::{
-    
-    io::{Read,Write},
-    fmt::{Formatter,Result,Display},
-};
-use super::{
-    cpu::CPU,cpu::FLAGS
-};
+
+use std::{fmt::{Formatter,Result,Display}, io::{Read, Write}};
+use super::{cpu::*, instr::Instruction};
 use crate::DisplayStyle;
 
-pub struct Computer<'a,I : Read,O : Write> {
+pub struct Computer<R : Read,W : Write> {
     disp_style : DisplayStyle,
-    pub cpu        : CPU<'a,I,O>
+    pub cpu        : CPU<R,W>,
 }
-pub struct ComputerBuilder<'a,I : Read,O : Write>  {
+impl<R : Read, W : Write> Computer<R,W> {
+    pub fn get_current_instruction<'a,'b>(&'a mut self) -> Option<(Instruction,String)> {
+        let s = self.cpu.code.get(self.cpu.pc() as usize);
+        self.cpu.pc += 1;
+        s
+    }
+}
+
+pub struct ComputerBuilder<R : Read,W : Write>  {
     disp_style : Option<DisplayStyle>,
-    cpu        : Option<CPU<'a,I,O>>
+    cpu        : Option<CPU<R,W>>,
+    io         : Option<IOBus<R,W>>,
+
 }
-impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
+impl<R : Read,W : Write> ComputerBuilder<R,W> {
     pub fn new() -> Self {
 
         ComputerBuilder {
             disp_style : None,
-            cpu  : None
+            cpu  : None,
+            io : None,
             
         }
     }
@@ -29,25 +35,59 @@ impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
         self.disp_style = Some(style);
         self
     }
-    pub fn attach_cpu(mut self, cpu : CPU<'a,I,O>) -> Self {
+    pub fn attach_cpu(mut self, cpu : CPU<R,W>) -> Self {
         self.cpu = Some(cpu);
         self
     }
-    pub fn build(self) -> std::result::Result<Computer<'a,I,O>,&'static str> {
+    
+    pub fn build(self) -> std::result::Result<Computer<R,W>,&'static str> {
         if self.cpu.is_none() || self.disp_style.is_none() {
-            return Err("Parts on CPU missing")
+            return Err("Parts on Computer missing")
         }
        Ok( Computer {
             cpu : self.cpu.unwrap(),
-            disp_style : self.disp_style.unwrap()
+            disp_style : self.disp_style.unwrap(),
         })
     }
+
+    pub(crate) fn attach_input_source(mut self, keyboard: R) -> Self {
+        let io = &mut self.io;
+        match io.as_mut() {
+            Some(i) => {
+                i.reader = Some(keyboard);
+            }
+            None => {
+                let mut i = IOBus::new();
+                i.reader = Some(keyboard);
+                *io = Some(i);
+                
+            }
+
+        }
+        self
+    }
+    pub fn attach_output_display(mut self, display : W) -> Self {
+        let io = &mut self.io;
+        match io.as_mut() {
+            Some(i) => {
+                i.writer = Some(display);
+            }
+            None => {
+                let mut i = IOBus::new();
+                i.writer = Some(display);
+                *io = Some(i);
+                
+            }
+
+        }
+        self
+    }
 }
-impl<'a,I : Read,O : Write> Display for Computer<'a,I,O> {
+impl<R : Read,W : Write> Display for Computer<R,W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
     match self.disp_style{
 
-    DisplayStyle::Denary => {   write!(f, 
+    DisplayStyle::Denary => {   writeln!(f, 
 r"
  ----------------------------------
 |              CPU                 |
@@ -73,7 +113,7 @@ r"
 
     },
     DisplayStyle::Binary => {
-       write!(f, 
+       writeln!(f, 
 r"
  ---------------------------------------------------
 |                   CPU                             |
@@ -101,7 +141,7 @@ r"
     },
     DisplayStyle::Hex => 
     {
-       write!(f, 
+       writeln!(f, 
 r"
  ----------------------------------
 |              CPU                 |
@@ -127,6 +167,7 @@ r"
 
         }
         
-      }
+      }?;
+      writeln!(f,"{}",self.cpu.data_bus.memory)
    }
 }

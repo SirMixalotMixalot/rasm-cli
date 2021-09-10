@@ -11,6 +11,7 @@ pub enum AdrMode {
 
 
 //#[derive(Debug)]
+#[derive(Clone, Copy)]
 pub enum Instruction {
     IO(bool),
     LOAD {data : u16, adr_mode : AdrMode},
@@ -131,7 +132,12 @@ pub fn str_to_instr(table : &mut SymbolTable,line : &str) -> Instruction {
         let p = ident.parse::<i16>();
         if p.is_err() {
             table.add_var(ident.to_string());
+
+ 
+
+
         }else{
+
             let p = p.unwrap();
             table.min_addr = min(table.min_addr, p as u16);
             table.max_addr = max(table.max_addr, p as u16);
@@ -154,6 +160,8 @@ pub fn str_to_instr(table : &mut SymbolTable,line : &str) -> Instruction {
         let imm = imm.expect("Error while parsing immediate value");
         return Instruction::with_imm(opcode, imm as u16)
     }
+
+
     if ident.starts_with("'") {
         let start = ident.find("'").unwrap();
         //This should be a character constant so len == 1
@@ -162,7 +170,9 @@ pub fn str_to_instr(table : &mut SymbolTable,line : &str) -> Instruction {
         let c = ident[start+1..end].chars().nth(0).unwrap();
         return Instruction::with_imm(opcode, c as u8 as u16);
     }
+
     Instruction::new(opcode,table.get(ident.to_string()))
     
 
 }
+

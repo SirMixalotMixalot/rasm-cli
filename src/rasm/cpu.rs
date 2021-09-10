@@ -1,41 +1,74 @@
 
-use super::{Instruction,AdrMode};
+use crate::rasm::mem::Memory;
+use super::{AdrMode, Code, Instruction};
 
 use std::{
-    io::{Read,Write}
+    io::{Read,Write},
+    ops::{Index,IndexMut},
+    
 };
 
-use super::mem::Memory;
-pub struct CPU<'a, I, O>
-where
-    I : Read,
-    O : Write {
-    acc : i16,
-    ix : i16,
-    pc : u16,
-    done : bool,
-    flag_register : Flags,
-    pub memory : &'a mut Memory, 
-    display    : O,
-    input      : I
+
+pub struct IOBus<R : Read, W : Write>{
+    pub reader :  Option<R>,
+    pub writer :  Option<W>
+}
+impl<R : Read,W : Write> IOBus<R,W> {
+    pub fn new() -> Self {
+        Self {
+            reader : None,
+            writer : None
+        }
+    }
+}
+pub trait RAM : Index<usize> + IndexMut<usize>{
+    fn max_addr(&self) -> usize;
+    fn min_addr(&self) -> usize;
 }
 
-impl<'a,I,O> CPU<'a,I,O>
-where
-    I : Read,
-    O : Write {
-    pub fn new(memory : &'a mut Memory, display : O, input : I) -> Self {
+pub struct DataBus {
+    pub memory : Memory
+}
+
+impl DataBus {
+    pub fn new(memory : Memory) -> Self {
+        Self {memory}
+    }
+    pub fn read(&self, addr : usize) -> i16 {
+        self.memory[addr]
+ 
+    }
+    pub fn write(&mut self,addr : usize,data :i16) {
+        self.memory[addr] = data 
+    }
+}
+pub struct CPU<R : Read ,W : Write>
+{
+    acc : i16,
+    ix : i16,
+    pub pc : u16,
+    done : bool,
+    flag_register : Flags,
+    pub data_bus : DataBus, 
+    io_bus: IOBus<R,W>,
+    pub code  : Code,
+}
+
+impl<R : Read,W : Write> CPU<R,W>
+ {
+    pub fn new(mem : Memory, code : Code) -> Self {
         CPU {
             acc : 0,
             ix  : 0,
             pc  : 0,
             done : false,
             flag_register : Flags::new(),
-            memory,
-            display,
-            input
+            data_bus : DataBus::new(mem),
+            io_bus :  IOBus::new(),
+            code
         }
     }
+
     pub fn acc(&self) -> i16 {
         self.acc
     }
@@ -77,13 +110,13 @@ where
     fn load(&mut self,data : u16,addressing_mode : AdrMode) {
         match addressing_mode {
             AdrMode::Indirect => {
-                self.acc = self.memory[self.memory[data as usize] as usize];
+                self.acc = self.data_bus.read(self.data_bus.read(data as usize) as usize);
             },
             AdrMode::Direct   => {
-                self.acc = self.memory[data as usize];
+                self.acc = self.data_bus.read(data as usize);
             },
             AdrMode::Indexed  => {
-                self.acc = self.memory[(data as i16 + self.ix) as usize];
+                self.acc = self.data_bus.read((data as i16 + self.ix) as usize);
             },
             AdrMode::Immediate => {
                 self.acc = data as i16;
@@ -113,7 +146,7 @@ where
     fn get_data(&self,i : u16,adr_mode : AdrMode) -> i16 {
         match adr_mode {
             AdrMode::Immediate => i as i16,
-            AdrMode::Direct    => self.memory[i as usize],
+            AdrMode::Direct    => self.data_bus.read(i as usize),
             _                  => unreachable!(),
         }
     }
@@ -128,11 +161,11 @@ where
         if inp {
             
             let mut buffer = [0;3];
-            self.input.read_exact(&mut buffer).unwrap();
+            self.io_bus.reader.as_mut().unwrap().read_exact(&mut buffer).unwrap();
             self.acc = buffer[0] as char as i16;
             self.flag_register.set_flags(Some(self.acc));
         }else {
-            write!(&mut self.display,"{}",self.acc as u8 as char).unwrap();
+            write!(&mut self.io_bus.writer.as_mut().unwrap(),"{}",self.acc as u8 as char).unwrap();
         }
     }
     fn sub(&mut self, imm : i16, adr_mode : AdrMode) {
@@ -144,7 +177,7 @@ where
     }
 
     fn sto(&mut self,addr : u16) {
-        self.memory[addr as usize] = self.acc;
+        self.data_bus.write(addr as usize, self.acc );
     }
     fn add(&mut self, imm : i16,adr_mode : AdrMode) {
         let imm = self.get_data(imm as u16, adr_mode);
