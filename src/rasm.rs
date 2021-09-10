@@ -1,3 +1,4 @@
+
 use std::{path::Path,fs};
 use std::collections::HashMap;
 use super::EnvArgs;
@@ -26,11 +27,15 @@ impl SymbolTable {
             num_vars : 0,
         }
     }
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
     pub fn add_var(&mut self,ident : String) {
         if ident.as_str() == "ACC" || ident.as_str() == "IX" {
             return;
         }
         let l = self.table.len();
+        
         if !self.table.contains_key(&ident) {
             self.table.insert(ident, l);
             self.num_vars += 1;
@@ -54,18 +59,17 @@ impl SymbolTable {
 
 
 pub struct Code{
-    table : SymbolTable,
     pub code : Vec<Instruction>,
-    pub debug_info : Vec<(usize,String)>
+    pub debug_info : Vec<String>
 }
 impl Code {
-    pub fn new(table : SymbolTable,code : Vec<Instruction>,debug_info : Vec<(usize,String)>) -> Self {
-        Self {table,code,debug_info}
+    pub fn new(code : Vec<Instruction>,debug_info : Vec<String>) -> Self {
+        Self {code,debug_info}
     }
-    pub fn get(&self,i : usize) -> Option<(&Instruction,&(usize,String))>
+    pub fn get(& self,i : usize) -> Option<(Instruction,String)>
     {
         if let Some(v) = self.code.get(i) {
-            Some((v,&self.debug_info[i]))
+            Some((*v,self.debug_info[i].clone()))
         }
         else {
             None
@@ -74,12 +78,12 @@ impl Code {
 }
 
 pub fn run(args : EnvArgs) {
-    let code = build_code(&args.file); 
-    exec::execute(code,args.style);
+    let (code,table) = build_code(&args.file); 
+    exec::execute(code,table,args.style);
 }
 
 
-fn build_code(file : &Path) -> Code {
+fn build_code(file : &Path) -> (Code,SymbolTable) {
     let mut table = SymbolTable::new();
     let mut code = Vec::new();
     let mut debug_info = Vec::new();
@@ -115,8 +119,8 @@ fn build_code(file : &Path) -> Code {
             continue;
         }
         code.push(str_to_instr(&mut table,line));
-        debug_info.push((index,line.to_string()));
+        debug_info.push(line.to_string());
     }
-    Code::new(table,code,debug_info)
+    (Code::new(code,debug_info),table)
 }
 

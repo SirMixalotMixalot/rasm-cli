@@ -27,6 +27,7 @@ Note:
     Vertical bar '|' means 'or'
 
 ";
+#[derive(Clone, Copy)]
 pub enum DisplayStyle {
     Denary,
     Binary,

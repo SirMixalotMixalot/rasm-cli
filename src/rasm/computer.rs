@@ -1,26 +1,33 @@
 
-use std::fmt::{Formatter,Result,Display};
-use super::{
-    cpu::CPU,cpu::FLAGS
-};
+use std::{fmt::{Formatter,Result,Display}, io::{Read, Write}};
+use super::{cpu::*, instr::Instruction};
 use crate::DisplayStyle;
 
-pub struct Computer<'a> {
+pub struct Computer<R : Read,W : Write> {
     disp_style : DisplayStyle,
-    pub cpu        : CPU<'a>,
+    pub cpu        : CPU<R,W>,
+}
+impl<R : Read, W : Write> Computer<R,W> {
+    pub fn get_current_instruction<'a,'b>(&'a mut self) -> Option<(Instruction,String)> {
+        let s = self.cpu.code.get(self.cpu.pc() as usize);
+        self.cpu.pc += 1;
+        s
+    }
 }
 
-pub struct ComputerBuilder<'a>  {
+pub struct ComputerBuilder<R : Read,W : Write>  {
     disp_style : Option<DisplayStyle>,
-    cpu        : Option<CPU<'a>>,
+    cpu        : Option<CPU<R,W>>,
+    io         : Option<IOBus<R,W>>,
 
 }
-impl<'a> ComputerBuilder<'a> {
+impl<R : Read,W : Write> ComputerBuilder<R,W> {
     pub fn new() -> Self {
 
         ComputerBuilder {
             disp_style : None,
             cpu  : None,
+            io : None,
             
         }
     }
@@ -28,12 +35,12 @@ impl<'a> ComputerBuilder<'a> {
         self.disp_style = Some(style);
         self
     }
-    pub fn attach_cpu(mut self, cpu : CPU<'a>) -> Self {
+    pub fn attach_cpu(mut self, cpu : CPU<R,W>) -> Self {
         self.cpu = Some(cpu);
         self
     }
     
-    pub fn build(self) -> std::result::Result<Computer<'a>,&'static str> {
+    pub fn build(self) -> std::result::Result<Computer<R,W>,&'static str> {
         if self.cpu.is_none() || self.disp_style.is_none() {
             return Err("Parts on Computer missing")
         }
@@ -42,10 +49,43 @@ impl<'a> ComputerBuilder<'a> {
             disp_style : self.disp_style.unwrap(),
         })
     }
+
+    pub(crate) fn attach_input_source(mut self, keyboard: R) -> Self {
+        let io = &mut self.io;
+        match io.as_mut() {
+            Some(i) => {
+                i.reader = Some(keyboard);
+            }
+            None => {
+                let mut i = IOBus::new();
+                i.reader = Some(keyboard);
+                *io = Some(i);
+                
+            }
+
+        }
+        self
+    }
+    pub fn attach_output_display(mut self, display : W) -> Self {
+        let io = &mut self.io;
+        match io.as_mut() {
+            Some(i) => {
+                i.writer = Some(display);
+            }
+            None => {
+                let mut i = IOBus::new();
+                i.writer = Some(display);
+                *io = Some(i);
+                
+            }
+
+        }
+        self
+    }
 }
-impl<'a> Display for Computer<'a> {
+impl<R : Read,W : Write> Display for Computer<R,W> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-    let x = match self.disp_style{
+    match self.disp_style{
 
     DisplayStyle::Denary => {   writeln!(f, 
 r"
@@ -127,43 +167,7 @@ r"
 
         }
         
-      };
-      //  _______________________
-      // | Addr : Name   | Value {16 bits/ 5 digits/ 4 higits (hex digits)}|
-      //
-      let max_len : u16 = match self.disp_style {
-            DisplayStyle::Denary =>  {
-                5
-            },
-            DisplayStyle::Binary => {
-                16
-            },
-            DisplayStyle::Hex => {
-                4
-            }
-      } ;
-      let max_len = std::cmp::max(max_len,10);
-      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1) as usize)?;
-      write!(f,"|{:^width$}|","Addresses",width=max_len as usize)?;
-      writeln!(f,"{:^width$}|","Contents",width=max_len as usize)?;
-      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1) as usize)?;
-      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1) as usize)?;
-      for addr in self.cpu.min_addr()..self.cpu.max_addr() {
-        
-        match self.disp_style {
-            DisplayStyle::Denary => {
-                writeln!(f,"|{:^width$}|{:^width$}|",addr,self.cpu.read(addr as usize),width=max_len as usize)?;
-                
-            },
-            DisplayStyle::Binary => {   
-                writeln!(f,"|{:^#width$b}|{:^#width$b}|",addr,self.cpu.read(addr as usize),width=max_len as usize)?;
-            },
-            DisplayStyle::Hex   => {
-                writeln!(f,"|{:^#width$x}|{:^#width$x}|",addr,self.cpu.read(addr as usize),width=max_len as usize)?;
-            }
-        }
-      }
-      writeln!(f," {:-^width$}",'-',width = (max_len * 2 + 1 ) as usize)?;
-      x
+      }?;
+      writeln!(f,"{}",self.cpu.data_bus.memory)
    }
 }

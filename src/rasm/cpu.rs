@@ -1,6 +1,6 @@
 
 use crate::rasm::mem::Memory;
-use super::{Instruction,AdrMode};
+use super::{AdrMode, Code, Instruction};
 
 use std::{
     io::{Read,Write},
@@ -9,14 +9,15 @@ use std::{
 };
 
 
-struct IOBus<'a>{
-    reader :  &'a mut dyn Read,
-    writer :  &'a mut dyn Write
+pub struct IOBus<R : Read, W : Write>{
+    pub reader :  Option<R>,
+    pub writer :  Option<W>
 }
-impl<'a> IOBus<'a> {
-    pub fn new(reader : &'a mut dyn Read, writer : &'a mut dyn Write) -> Self {
+impl<R : Read,W : Write> IOBus<R,W> {
+    pub fn new() -> Self {
         Self {
-            reader,writer
+            reader : None,
+            writer : None
         }
     }
 }
@@ -25,8 +26,8 @@ pub trait RAM : Index<usize> + IndexMut<usize>{
     fn min_addr(&self) -> usize;
 }
 
-struct DataBus {
-    memory : Memory
+pub struct DataBus {
+    pub memory : Memory
 }
 
 impl DataBus {
@@ -41,20 +42,21 @@ impl DataBus {
         self.memory[addr] = data 
     }
 }
-pub struct CPU<'a>
+pub struct CPU<R : Read ,W : Write>
 {
     acc : i16,
     ix : i16,
-    pc : u16,
+    pub pc : u16,
     done : bool,
     flag_register : Flags,
-    data_bus : DataBus, 
-    io_bus: IOBus<'a>
+    pub data_bus : DataBus, 
+    io_bus: IOBus<R,W>,
+    pub code  : Code,
 }
 
-impl<'a> CPU<'a>
+impl<R : Read,W : Write> CPU<R,W>
  {
-    pub fn new(mem : Memory, reader : &'a mut dyn Read, writer : &'a mut dyn Write) -> Self {
+    pub fn new(mem : Memory, code : Code) -> Self {
         CPU {
             acc : 0,
             ix  : 0,
@@ -62,18 +64,11 @@ impl<'a> CPU<'a>
             done : false,
             flag_register : Flags::new(),
             data_bus : DataBus::new(mem),
-            io_bus :  IOBus::new(reader,writer),
+            io_bus :  IOBus::new(),
+            code
         }
     }
-    pub fn read(&self,addr : usize) -> u16 {
-        self.data_bus.read(addr) as u16
-    }
-    pub fn min_addr(&self) -> usize {
-        self.data_bus.memory.min_addr() as usize
-    }
-    pub fn max_addr(&self) -> usize {
-        self.data_bus.memory.max_addr() as usize
-    }
+
     pub fn acc(&self) -> i16 {
         self.acc
     }
@@ -166,11 +161,11 @@ impl<'a> CPU<'a>
         if inp {
             
             let mut buffer = [0;3];
-            self.io_bus.reader.read_exact(&mut buffer).unwrap();
+            self.io_bus.reader.as_mut().unwrap().read_exact(&mut buffer).unwrap();
             self.acc = buffer[0] as char as i16;
             self.flag_register.set_flags(Some(self.acc));
         }else {
-            write!(&mut self.io_bus.writer,"{}",self.acc as u8 as char).unwrap();
+            write!(&mut self.io_bus.writer.as_mut().unwrap(),"{}",self.acc as u8 as char).unwrap();
         }
     }
     fn sub(&mut self, imm : i16, adr_mode : AdrMode) {

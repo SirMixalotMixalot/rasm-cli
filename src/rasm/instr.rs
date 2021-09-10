@@ -11,6 +11,7 @@ pub enum AdrMode {
 
 
 //#[derive(Debug)]
+#[derive(Clone, Copy)]
 pub enum Instruction {
     IO(bool),
     LOAD {data : u16, adr_mode : AdrMode},
