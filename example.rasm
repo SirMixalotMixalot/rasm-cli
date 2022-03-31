@@ -1,0 +1,23 @@
+    LDM #5
+    STO X
+    LDM #8
+    STO Y
+    LDM #20
+    STO A
+    LDM #10
+    STO B
+
+    
+    LDD X
+    CMP Y
+    JPN SUBTRACT
+    LDD A
+    ADD B
+    STO Y
+    JMP EXIT
+SUBTRACT:
+    LDD A 
+    SUB B
+    STO Y
+EXIT:
+    END

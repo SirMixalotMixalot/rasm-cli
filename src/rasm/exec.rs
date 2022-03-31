@@ -4,8 +4,8 @@ use super::{Code,cpu::*,mem::Memory,computer::ComputerBuilder};
 pub fn execute(code : Code, style : DisplayStyle ) {
     use std::io;
 
-    let mut mem  = Memory::new(code.table.min_addr,code.table.num_vars);
-    let cpu = CPU::new(&mut mem,io::stdout(),io::stdin());
+    let mem: Memory<100>  = Memory::new(code.table.min_addr,style,code.table.num_vars);
+    let cpu = CPU::new(mem,io::stdout(),io::stdin());
     let mut computer = ComputerBuilder::new()
     .attach_cpu(cpu)
     .display_style(style)

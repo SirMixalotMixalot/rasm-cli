@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::mem::Memory;
-pub struct CPU<'a, I, O>
+pub struct CPU<I, O, const N: usize>
 where
     I : Read,
     O : Write {
@@ -15,16 +15,16 @@ where
     pc : u16,
     done : bool,
     flag_register : Flags,
-    pub memory : &'a mut Memory, 
+    pub memory : Memory<N>, 
     display    : O,
     input      : I
 }
 
-impl<'a,I,O> CPU<'a,I,O>
+impl<I,O, const N: usize> CPU<I,O,N>
 where
     I : Read,
     O : Write {
-    pub fn new(memory : &'a mut Memory, display : O, input : I) -> Self {
+    pub fn new(memory :Memory<N>, display : O, input : I) -> Self {
         CPU {
             acc : 0,
             ix  : 0,

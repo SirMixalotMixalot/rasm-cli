@@ -8,15 +8,15 @@ use super::{
 };
 use crate::DisplayStyle;
 
-pub struct Computer<'a,I : Read,O : Write> {
+pub struct Computer<I : Read,O : Write, const N: usize> {
     disp_style : DisplayStyle,
-    pub cpu        : CPU<'a,I,O>
+    pub cpu        : CPU<I,O,N>
 }
-pub struct ComputerBuilder<'a,I : Read,O : Write>  {
+pub struct ComputerBuilder<I : Read,O : Write, const N: usize>  {
     disp_style : Option<DisplayStyle>,
-    cpu        : Option<CPU<'a,I,O>>
+    cpu        : Option<CPU<I,O,N>>
 }
-impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
+impl<'a,I : Read,O : Write, const N: usize> ComputerBuilder<I ,O , N> {
     pub fn new() -> Self {
 
         ComputerBuilder {
@@ -29,11 +29,11 @@ impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
         self.disp_style = Some(style);
         self
     }
-    pub fn attach_cpu(mut self, cpu : CPU<'a,I,O>) -> Self {
+    pub fn attach_cpu(mut self, cpu : CPU<I,O,N>) -> Self {
         self.cpu = Some(cpu);
         self
     }
-    pub fn build(self) -> std::result::Result<Computer<'a,I,O>,&'static str> {
+    pub fn build(self) -> std::result::Result<Computer<I,O,N>,&'static str> {
         if self.cpu.is_none() || self.disp_style.is_none() {
             return Err("Parts on CPU missing")
         }
@@ -43,7 +43,7 @@ impl<'a,I : Read,O : Write> ComputerBuilder<'a,I ,O > {
         })
     }
 }
-impl<'a,I : Read,O : Write> Display for Computer<'a,I,O> {
+impl<'a,I : Read,O : Write, const N: usize> Display for Computer<I,O,N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
     match self.disp_style{
 
