@@ -2,9 +2,8 @@
 An  interpreter for the 'reduced' assembly language for AS level
 
 ## Current State
-- Poorly designed
-- Not optimized
 - Current Textual Interface leaves alot to be desired
+- But it works!
 
 ## Installaion
 Head over to ['Releases'](https://github.com/SirMixalotMixalot/rasm-cli/releases) and download the rasm.zip  
@@ -13,9 +12,8 @@ Go to that directory and on the command line (cmd/bash/etc...) type `./rasm-cli 
 
 # Goals
 - Refactor code
-  - [X] Stage 1 - Splitting code up into units with a lower cohesion
-  - [ ] Stage 2 - Add tests
+  - [X] Splitting code up into units with a lower cohesion
 - [ ] Improve tui using [tui-rs](https://github.com/fdehau/tui-rs)
-- [ ] Improve parsing of asm file 
-- [ ] Build for x86_64 Apple
+- [X] Improve parsing of asm file 
+- [ ] Build for x86_64 Apple - unable to because I do not own a mac :(
 
