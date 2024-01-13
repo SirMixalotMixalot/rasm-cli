@@ -2,8 +2,10 @@
 An  interpreter for the 'reduced' assembly language for AS level
 
 ## Current State
-- Current Textual Interface leaves alot to be desired
-- But it works!
+- Just works
+
+## Demo
+[video](https://clipchamp.com/watch/d2aow1EP3Kw)
 
 ## Installaion
 Head over to ['Releases'](https://github.com/SirMixalotMixalot/rasm-cli/releases) and download the rasm.zip  
